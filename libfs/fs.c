@@ -116,23 +116,23 @@ int fs_mount(const char *diskname)
 
 int fs_umount(void)
 {
-	// 1. Check if FS is not mounted
+	// Check if FS is not mounted
 	if (!fs_mounted)
 		return -1;
 
-	// 2. Free dynamically allocated memory
+	// Free dynamically allocated memory
 	free(fat);
 	fat = NULL;
 
-	// 3. Reset superblock and root_dir (optional but clean)
+	// Resets superblock and root_dir (optional but clean)
 	memset(&sb, 0, sizeof(sb));
 	memset(root_dir, 0, sizeof(root_dir));
 
-	// 4. Close the virtual disk
+	// Closes the virtual disk
 	if (block_disk_close() < 0)
 		return -1;
 
-	// 5. Mark FS as unmounted
+	// Marks FS as unmounted
 	fs_mounted = 0;
 	return 0;
 }
