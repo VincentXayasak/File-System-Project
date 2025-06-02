@@ -177,8 +177,6 @@ int fs_info(void)
 	return 0;
 }
 
-#define FAT_EOC 0xFFFF // Define end-of-chain marker
-
 int fs_create(const char *filename)
 {
 	// Phase 2
