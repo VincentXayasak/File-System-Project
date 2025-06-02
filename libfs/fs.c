@@ -116,25 +116,35 @@ int fs_mount(const char *diskname)
 
 int fs_umount(void)
 {
-	// Check if FS is not mounted
-	if (!fs_mounted)
-		return -1;
+    // Checks if FS is not mounted
+    if (!fs_mounted)
+        return -1;
 
-	// Free dynamically allocated memory
-	free(fat);
-	fat = NULL;
+    // Writes back FAT to disk
+    for (int i = 0; i < sb.fat_blocks; i++) {
+        if (block_write(1 + i, ((uint8_t *)fat) + i * BLOCK_SIZE) < 0)
+            return -1;
+    }
 
-	// Resets superblock and root_dir (optional but clean)
-	memset(&sb, 0, sizeof(sb));
-	memset(root_dir, 0, sizeof(root_dir));
+    // Writes back root directory
+    if (block_write(sb.root_index, root_dir) < 0)
+        return -1;
 
-	// Closes the virtual disk
-	if (block_disk_close() < 0)
-		return -1;
+    // Frees dynamically allocated memory
+    free(fat);
+    fat = NULL;
 
-	// Marks FS as unmounted
-	fs_mounted = 0;
-	return 0;
+    // Clears in-memory data structures
+    memset(&sb, 0, sizeof(sb));
+    memset(root_dir, 0, sizeof(root_dir));
+
+    // Closes virtual disk
+    if (block_disk_close() < 0)
+        return -1;
+
+    // Marks FS as unmounted
+    fs_mounted = 0;
+    return 0;
 }
 
 int fs_info(void)
@@ -176,6 +186,8 @@ int fs_info(void)
 
 	return 0;
 }
+
+#define FAT_EOC 0xFFFF // Define end-of-chain marker
 
 int fs_create(const char *filename)
 {
