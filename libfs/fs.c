@@ -187,24 +187,9 @@ int fs_info(void)
 	return 0;
 }
 
+// Phase 2
+
 #define FAT_EOC 0xFFFF // Define end-of-chain marker
-
-int fs_create(const char *filename)
-{
-	// Phase 2
-}
-
-int fs_delete(const char *filename)
-{
-	// Phase 2
-}
-
-int fs_ls(void)
-{
-	// Phase 2
-}
-
-// Phase 3
 
 struct file_descriptor
 {
@@ -214,6 +199,136 @@ struct file_descriptor
 };
 
 static struct file_descriptor fd_table[FS_OPEN_MAX_COUNT];
+
+int fs_create(const char *filename)
+{
+    /* Check if filesystem is mounted */
+    if (!fs_mounted) {
+        return -1;
+    }
+
+    /* Check filename validity */
+    if (filename == NULL || strlen(filename) >= FS_FILENAME_LEN) {
+        return -1;
+    }
+
+    /* Check if filename is empty */
+    if (strlen(filename) == 0) {
+        return -1;
+    }
+
+    /* Check if file already exists and find empty slot */
+    int empty_slot = -1;
+    for (int i = 0; i < FS_FILE_MAX_COUNT; i++) {
+        if (root_dir[i].filename[0] == '\0' && empty_slot == -1) {
+            empty_slot = i;
+        } else if (strncmp(root_dir[i].filename, filename, FS_FILENAME_LEN) == 0) {
+            /* File already exists */
+            return -1;
+        }
+    }
+
+    /* No empty slot found */
+    if (empty_slot == -1) {
+        return -1;
+    }
+
+    /* Create new file entry */
+    strncpy(root_dir[empty_slot].filename, filename, FS_FILENAME_LEN - 1);
+    root_dir[empty_slot].filename[FS_FILENAME_LEN - 1] = '\0';
+    root_dir[empty_slot].size = 0;
+    root_dir[empty_slot].data_index = FAT_EOC;
+
+    /* Write root directory back to disk */
+    if (block_write(sb.root_index, root_dir) < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int fs_delete(const char *filename)
+{
+    /* Check if filesystem is mounted */
+    if (!fs_mounted) {
+        return -1;
+    }
+
+    /* Check filename validity */
+    if (filename == NULL) {
+        return -1;
+    }
+
+    /* Find the file */
+    int file_index = -1;
+    for (int i = 0; i < FS_FILE_MAX_COUNT; i++) {
+        if (strncmp(root_dir[i].filename, filename, FS_FILENAME_LEN) == 0) {
+            file_index = i;
+            break;
+        }
+    }
+
+    /* File not found */
+    if (file_index == -1) {
+        return -1;
+    }
+
+    /* Check if file is currently open */
+    for (int i = 0; i < FS_OPEN_MAX_COUNT; i++) {
+        if (fd_table[i].used && fd_table[i].root_index == file_index) {
+            return -1;
+        }
+    }
+
+    /* Free all data blocks in FAT */
+    uint16_t current_block = root_dir[file_index].data_index;
+    while (current_block != FAT_EOC) {
+        uint16_t next_block = fat[current_block];
+        fat[current_block] = 0;
+        current_block = next_block;
+    }
+
+    /* Clear the directory entry */
+    memset(&root_dir[file_index], 0, sizeof(struct root_directory));
+
+    /* Write FAT back to disk */
+    for (int i = 0; i < sb.fat_blocks; i++) {
+        if (block_write(1 + i, ((uint8_t *)fat) + i * BLOCK_SIZE) < 0) {
+            return -1;
+        }
+    }
+
+    /* Write root directory back to disk */
+    if (block_write(sb.root_index, root_dir) < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int fs_ls(void)
+{
+    /* Check if filesystem is mounted */
+    if (!fs_mounted) {
+        return -1;
+    }
+
+    printf("FS Ls:\n");
+    
+    /* List all files */
+    for (int i = 0; i < FS_FILE_MAX_COUNT; i++) {
+        if (root_dir[i].filename[0] != '\0') {
+            printf("file: %s, size: %u, data_blk: %u\n",
+                   root_dir[i].filename,
+                   root_dir[i].size,
+                   root_dir[i].data_index);
+        }
+    }
+
+    return 0;
+}
+
+// Phase 3
 
 int fs_open(const char *filename)
 {
