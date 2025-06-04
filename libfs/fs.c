@@ -65,12 +65,9 @@ int fs_mount(const char *diskname)
     // Copy the superblock bytes into the structured superblock in memory
     memcpy(&sb, buffer, sizeof(struct superblock));
 
-    sb.signature[7] = '\0';
-
     // Verify the filesystem signature matches "ECS150FS"
     if (memcmp(sb.signature, "ECS150FS", 8) != 0)
     {
-        memset(&sb, 0, sizeof(sb));
         block_disk_close(); // invalid filesystem
         return -1;
     }
@@ -78,7 +75,6 @@ int fs_mount(const char *diskname)
     // Check that the superblock's block count matches the actual disk size
     if (sb.total_blocks != (uint16_t)block_disk_count())
     {
-        memset(&sb, 0, sizeof(sb));
         block_disk_close();
         return -1;
     }
@@ -88,7 +84,6 @@ int fs_mount(const char *diskname)
     fat = malloc(sb.fat_blocks * BLOCK_SIZE);
     if (!fat)
     {
-        memset(&sb, 0, sizeof(sb));
         block_disk_close();
         return -1;
     }
@@ -507,19 +502,9 @@ int fs_write(int fd, void *buf, size_t count)
     int file_index = fd_table[fd].root_index;
     uint32_t file_size = root_dir[file_index].size;
 
-    if (offset + count < offset)
-    {
-        return -1; // overflow check
-    }
-
     // Finds the start block
     int block_idx = root_dir[file_index].data_index;
     int prev_block = -1;
-
-    if (block_idx < 0 || block_idx >= sb.data_count)
-    {
-        return -1;
-    }
 
     // If the file has no data block yet, allocate one
     if (block_idx == FAT_EOC)
@@ -601,21 +586,11 @@ int fs_read(int fd, void *buf, size_t count)
     if (offset >= file_size)
         return 0; // Nothing to read, at EOF
 
-    if (offset + count < offset)
-    {
-        return -1; // overflow check
-    }
-
     size_t remaining = file_size - offset;
     size_t to_read = (count < remaining) ? count : remaining;
     size_t read_bytes = 0;
 
     int block_idx = root_dir[file_index].data_index;
-
-    if (block_idx < 0 || block_idx >= sb.data_count)
-    {
-        return -1;
-    }
 
     // Traverses FAT chain to the starting block
     int block_offset = offset / BLOCK_SIZE;
